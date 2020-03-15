@@ -37,12 +37,11 @@ summary(dataset)
 gg_miss_var(dataset)
 
 # Cleaninng the data 
-
 #from this graph we see that 1.4% of the data is missing which
 #comes from the CSFId column which is basically the CDPH internal i
 #dentification number for a color/scent/flavor.
 # since about 30% of the data inn csfid is missing and it conveys almost the same information as csf i see the best way 
-# to move foward with this analysis is to drop the data 
+# to move foward with this analysis is to drop the data  and in addition all primary Keys 
 
 dataset = select(dataset,-c(DiscontinuedDate, ChemicalDateRemoved,
                             CasNumber,PrimaryCategoryId,CompanyId,
@@ -51,12 +50,13 @@ gg_miss_var(dataset)
 
 # Changing missing values in CSF to "Other"
 dataset$CSF[is.na(dataset$CSF)]="None"
+
+#Revisualizing the missing data
 vis_miss(dataset, 'warn_large_data' = FALSE )
 
 
 
 # visulizing the missing data in Brand name field
-
 # rows with missing values for brand name 
 missing_brands = dataset[!complete.cases(dataset$BrandName), ]
 par(las=4)
@@ -86,24 +86,13 @@ chemicals<-chemicals[!(chemicals$BrandName=="NA" | chemicals$BrandName=="None")|
 vis_miss(chemicals, 'warn_large_data' = FALSE )
 
 
-typeof(chemicals$InitialDateReported)
-
-
-
-
-test = as.Date(chemicals$InitialDateReported)
-
-
-
 
 # At this point we have dealt with the missing data so Lets move on to building a model
-
 
 #Exploring the dataset . 
 
 # Top 20 companies in the dataset by product  
-
-# Load dataset from github
+#Creating a Frequency Table
 company.freq <- table(chemicals$CompanyName)
 company.freq = data.frame(company.freq)
 data <- company.freq
@@ -129,10 +118,7 @@ data %>%
 
 
 # Most popular brands by product 
-
 # Top 20 most popular chemicals  
-
-# Load dataset from github
 chemical.freq <- table(chemicals$ChemicalName)
 chemical.freq = data.frame(chemical.freq)
 chemical.freq$Freq = log10(chemical.freq$Freq)
@@ -160,10 +146,7 @@ data %>%
 
 
 
-#Brands with the highest number of recalls 
-
-
-
+#Brands with the highest number of recalls , Making a circle barplot
 # Sub categories with the gighest chemical count 
 recall <- ogdataset[,c("PrimaryCategory", "DiscontinuedDate")]
 recall <- na.omit(recall) 
@@ -171,7 +154,7 @@ recall.freq = table(recall$PrimaryCategory)
 recall.freq = data.frame(recall.freq)
 
 # Librares
-data <- recall.freq
+data = recall.freq
 
 # Libraries
 library(tidyverse)
@@ -224,21 +207,18 @@ ggplot(tmp, aes(x=as.factor(id), y=Freq)) +       # Note that id is a factor. If
   geom_text( aes(x=10, y=8500, label="Category with the most Recals"), color="black", inherit.aes = FALSE)
 
 
+
 #NOW WE FINALLY MOVE ON TO heirachical clustering 
 
 datasetF = subset(chemicals, select = -c(MostRecentDateReported, ChemicalCreatedAt,ChemicalUpdatedAt, InitialDateReported))
 datasetFl = subset(datasetF, PrimaryCategory=="Skin Care Products " & datasetF$ChemicalCount >=2)
 
-#----- Dissimilarity Matrix -----#
+#-Dissimilarity Matrix
 library(cluster) 
-# to perform different types of hierarchical clustering
-# package functions used: daisy(), diana(), clusplot()
 gower.dist <- daisy(datasetFl[ ,1:8], metric = c("gower"))
-# class(gower.dist) 
-## dissimilarity , dist
 
 
-#------------ AGGLOMERATIVE CLUSTERING ------------#
+# AGGLOMERATIVE CLUSTERING 
 
 aggl.clust.c <- hclust(gower.dist, method = "complete")
 plot(aggl.clust.c,
@@ -250,6 +230,8 @@ library(fpc)
 
 #________ Identifying best cluster ______________
 
+#Using the elbow  method to identify the best cluster. From the look of the graph it is clear that the initial guess of 5 was quite off and 
+# a k=8 number of clusters would be more apporiate 
 ggplot(data = data.frame(t(cstats.table(gower.dist, aggl.clust.c, 15))), 
        aes(x=cluster.number, y=within.cluster.ss)) + 
   geom_point()+
@@ -257,6 +239,43 @@ ggplot(data = data.frame(t(cstats.table(gower.dist, aggl.clust.c, 15))),
   ggtitle("Agglomerative clustering") +
   labs(x = "Num.of clusters", y = "Within clusters sum of squares (SS)") +
   theme(plot.title = element_text(hjust = 0.5))
+
+
+
+# CONCLUSIONS
+# To close from our results we have been able to identify the categories with the most recalls. 
+# This can potentially point  to the categories which are more regulated than others. This decision can
+# help a consumer know which type of products they should be more aware of when shopping. In addition we also 
+# identified the most popular chemicals in product. This graph is of significance because it helps a consumer understand 
+# the causation of certain reactions on their skin.  In addition we are able to also identify the companies with the most
+# products which can help a consumer identify brands that give them more options when it comes to skin care. While at the
+# moment it is not quite apparent what the possible clusters we found could mean , In the future when analyzed by someone 
+# with domain knowledge this could possibly be able to explain a significant trend in the skin care data. 
+
+
+
+#ACKNOWELEDGEMENTS
+# 1.	Schneider, Günther et al (2005). "Skin Cosmetics" in Ullmann's Encyclopedia of Industrial Chemistry, Wiley-VCH, Weinheim. doi:10.1002/14356007.a24_219
+# 2.	https://github.com/yanfei-wu/chemical_cosmetic/blob/master/notebook/chemical_in_beauty_products.ipynb
+# 3.	Hierarchical clustering tutorial (data preparation, clustering, visualization), overall, this blog might be useful for someone interested in business analytics with R: http://uc-r.github.io/hc_clustering and https://uc-r.github.io/kmeans_clustering
+# 4.	Cluster validation: http://www.sthda.com/english/articles/29-cluster-validation-essentials/97-cluster-validation-statistics-must-know-methods/
+# 5.	An example of document categorization (hierarchical and k-means): https://eight2late.wordpress.com/2015/07/22/a-gentle-introduction-to-cluster-analysis-using-r/
+# 6.	Hierarchical Clustering on Categorical Data in R, https://towardsdatascience.com/hierarchical-clustering-on-categorical-data-in-r-a27e578f2995
+# 7.	The graph gallery, https://www.r-graph-gallery.com/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
